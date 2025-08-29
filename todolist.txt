@@ -1,0 +1,11 @@
+- Cambiar espacio entre Tiles
+- Añadir 5 por jugador tiles de 50% de curacion
+- Diferenciar un poco a los monstruos
+- La muerte no es permanente en la primera etapa, se vuelve a la casilla inicial full hp
+- En la etapa final la muerte es permanente (Despues de matar) 
+- Combate pvp en primera etapa de juego, donde caer en la misma casilla de un jugador inicia combate,
+    El ganador roba un item y el perdedor vuelve. 
+- Dar una lista al comienzo de informacion de lo que hace cada item, cada monstruo y cada personaje
+    Puede estar en un boton de guia 
+- Fixear tp y otras habilidades
+- Feedback (Has ganado el combate, has obtenido x item)
