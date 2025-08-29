@@ -58,4 +58,4 @@ export const MAGICAL_ITEMS = [
   "🗡️ Blade of Swiftness (attack first in combat)",
 ]
 
-export const BOARD_SIZE = 18
+export const BOARD_SIZE = 15

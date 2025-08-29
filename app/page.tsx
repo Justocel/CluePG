@@ -35,6 +35,8 @@ export default function BoardGame() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
 
   const [isTeleportActive, setIsTeleportActive] = useState(false);
+  const [combatAbilityUsed, setCombatAbilityUsed] = useState(false);
+  const [magicMissileUsed, setMagicMissileUsed] = useState(false);
 
   const consumeItem = (itemIndex: number, playerId: number) => {
     const player = players[playerId]
@@ -379,6 +381,118 @@ export default function BoardGame() {
     }, 100)
   }
 
+  const useCombatAbility = () => {
+    if (!combatState || combatState.isRolling || combatAbilityUsed) return
+
+    const currentPlayerData = players[currentPlayer]
+    if (currentPlayerData.combatAbility.uses <= 0) return
+
+    // Update player's combat ability uses
+    const updatedPlayers = [...players]
+    updatedPlayers[currentPlayer] = {
+      ...currentPlayerData,
+      combatAbility: {
+        ...currentPlayerData.combatAbility,
+        uses: currentPlayerData.combatAbility.uses - 1
+      }
+    }
+    setPlayers(updatedPlayers)
+
+    // Mark combat ability as used for this combat
+    setCombatAbilityUsed(true)
+
+    // Add to combat log
+    setCombatState((prev) =>
+      prev
+        ? {
+            ...prev,
+            combatLog: [...prev.combatLog, `${currentPlayerData.name} used ${currentPlayerData.combatAbility.name}!`],
+          }
+        : null,
+    )
+
+    // Apply combat ability effects based on character type
+    const characterData = CHARACTERS.find(char => char.name === currentPlayerData.character)
+    if (characterData) {
+      switch (currentPlayerData.character) {
+        case "Warrior":
+          // Berserker Rage: +4 damage for one attack
+          updatedPlayers[currentPlayer].combatBonuses.attackBonus += 4
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} gains +4 attack bonus!`],
+                }
+              : null,
+          )
+          break
+        case "Mage":
+          // Magic Missile: Guaranteed 8 damage (no dice)
+          setMagicMissileUsed(true)
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} casts Magic Missile for guaranteed damage!`],
+                }
+              : null,
+          )
+          break
+        case "Archer":
+          // Precise Shot: Always roll maximum on dice
+          updatedPlayers[currentPlayer].combatBonuses.rollBonus += 6 // Max dice roll is 12, so +6 bonus
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} takes precise aim for maximum damage!`],
+                }
+              : null,
+          )
+          break
+        case "Rogue":
+          // Backstab: Attack first and deal +3 damage
+          updatedPlayers[currentPlayer].combatBonuses.attackBonus += 3
+          updatedPlayers[currentPlayer].combatBonuses.attackFirst = true
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} prepares for a backstab attack!`],
+                }
+              : null,
+          )
+          break
+        case "Paladin":
+          // Holy Strike: Deal damage equal to missing health
+          const missingHealth = currentPlayerData.maxHealth - currentPlayerData.health
+          updatedPlayers[currentPlayer].combatBonuses.attackBonus += missingHealth
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} channels divine power! (+${missingHealth} damage)`],
+                }
+              : null,
+          )
+          break
+        case "Druid":
+          // Wild Shape: Take half damage for 3 rounds
+          updatedPlayers[currentPlayer].wildShapeRounds = 3
+          setCombatState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  combatLog: [...prev.combatLog, `${currentPlayerData.name} transforms into a mighty beast! (Half damage for 3 rounds)`],
+                }
+              : null,
+          )
+          break
+      }
+    }
+  }
+
   const rollCombatDice = () => {
     if (!combatState || combatState.isRolling) return
 
@@ -486,7 +600,14 @@ export default function BoardGame() {
     const updatedPlayers = [...players]
     let updatedMonsters = [...monsters]
 
-    const playerDamage = playerRoll + currentPlayerData.combatBonuses.attackBonus
+    let playerDamage = playerRoll + currentPlayerData.combatBonuses.attackBonus
+    
+    // Handle Magic Missile special case
+    if (magicMissileUsed) {
+      playerDamage = 8 + currentPlayerData.combatBonuses.attackBonus
+      setMagicMissileUsed(false) // Reset after use
+    }
+    
     const opponentDamage = opponentRoll
 
     if (combatState.isPvP && combatState.opponent) {
@@ -503,7 +624,15 @@ export default function BoardGame() {
       // Opponent deals damage to player (if still alive)
       if (updatedPlayers[opponentIndex].health > 0) {
         const opponentAttackDamage = opponentDamage + combatState.opponent.combatBonuses.attackBonus
-        const reducedOpponentDamage = Math.max(1, opponentAttackDamage - currentPlayerData.combatBonuses.defenseBonus)
+        let reducedOpponentDamage = Math.max(1, opponentAttackDamage - currentPlayerData.combatBonuses.defenseBonus)
+        
+        // Handle Wild Shape damage reduction
+        if (updatedPlayers[currentPlayer].wildShapeRounds > 0) {
+          reducedOpponentDamage = Math.floor(reducedOpponentDamage / 2)
+          updatedPlayers[currentPlayer].wildShapeRounds -= 1
+          newCombatLog.push(`${currentPlayerData.name} takes half damage due to Wild Shape!`)
+        }
+        
         updatedPlayers[currentPlayer].health = Math.max(0, updatedPlayers[currentPlayer].health - reducedOpponentDamage)
         newCombatLog.push(
           `${combatState.opponent.name} deals ${reducedOpponentDamage} damage to ${currentPlayerData.name}!`,
@@ -554,6 +683,8 @@ export default function BoardGame() {
 
       setTimeout(() => {
         setCombatState(null)
+        setCombatAbilityUsed(false)
+        setMagicMissileUsed(false)
         if (remainingPlayers.length > 1) {
           setGameState("pvp")
           endTurn()
@@ -569,7 +700,15 @@ export default function BoardGame() {
 
       // Monster deals damage to player (if still alive)
       if (updatedMonster.health > 0) {
-        const reducedDamage = Math.max(1, opponentDamage - currentPlayerData.combatBonuses.defenseBonus)
+        let reducedDamage = Math.max(1, opponentDamage - currentPlayerData.combatBonuses.defenseBonus)
+        
+        // Handle Wild Shape damage reduction
+        if (updatedPlayers[currentPlayer].wildShapeRounds > 0) {
+          reducedDamage = Math.floor(reducedDamage / 2)
+          updatedPlayers[currentPlayer].wildShapeRounds -= 1
+          newCombatLog.push(`${currentPlayerData.name} takes half damage due to Wild Shape!`)
+        }
+        
         updatedPlayers[currentPlayer].health = Math.max(0, updatedPlayers[currentPlayer].health - reducedDamage)
         newCombatLog.push(`${updatedMonster.type} deals ${reducedDamage} damage!`)
       }
@@ -600,6 +739,8 @@ export default function BoardGame() {
           newCombatLog.push("All monsters defeated! PvP phase begins!")
           setTimeout(() => {
             setCombatState(null)
+            setCombatAbilityUsed(false)
+            setMagicMissileUsed(false)
             setGameState("pvp")
             setGameMessage("PvP Phase: Attack other players to eliminate them!")
             endTurn()
@@ -609,6 +750,8 @@ export default function BoardGame() {
 
         setTimeout(() => {
           setCombatState(null)
+          setCombatAbilityUsed(false)
+          setMagicMissileUsed(false)
           setGameState("playing")
           endTurn()
         }, 3000)
@@ -628,6 +771,8 @@ export default function BoardGame() {
 
         setTimeout(() => {
           setCombatState(null)
+          setCombatAbilityUsed(false)
+          setMagicMissileUsed(false)
           setGameState("playing")
           endTurn()
         }, 3000)
@@ -733,6 +878,7 @@ export default function BoardGame() {
         onRollCombatDice={rollCombatDice}
         onRerollDice={rerollDice}
         onOpenInventory={handleOpenInventory}
+        onUseCombatAbility={useCombatAbility}
       />
     )
   }
