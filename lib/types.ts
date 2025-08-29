@@ -53,6 +53,6 @@ export type Character = {
 }
 
 export type TileContent = {
-  type: "obstacle" | "player" | "monster" | "empty"
+  type: "obstacle" | "player" | "monster" | "heal" | "damage" | "empty"
   content: string
 }

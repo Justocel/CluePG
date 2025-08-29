@@ -83,12 +83,30 @@ export const isTileClickable = (
   movesLeft: number,
   currentPlayer: Player,
   players: Player[],
-  obstacles: Set<string>
+  obstacles: Set<string>,
+  monsters: Monster[],
+  isTeleportActive: boolean = false
 ) => {
-  if (gameState !== "playing" || movesLeft <= 0) return false
+  if (gameState !== "playing") return false
 
   if (!currentPlayer || currentPlayer.isEliminated) return false
 
+  // Allow teleport even when movesLeft is 0
+  if (isTeleportActive) {
+    if(obstacles.has(`${x},${y}`)) return false;
+
+    const occupiedByPlayer = players.find((player) => player.position.x === x && player.position.y === y && !player.isEliminated);
+    if(occupiedByPlayer) return false;
+
+    const occupiedByMonster = monsters.find((monster) => monster.position.x === x && monster.position.y === y && !monster.defeated);
+    if(occupiedByMonster) return false;
+
+    return true; 
+  }
+
+  // For normal movement, require movesLeft > 0
+  if (movesLeft <= 0) return false
+  
   const distance = Math.abs(x - currentPlayer.position.x) + Math.abs(y - currentPlayer.position.y)
   if (distance !== 1) return false
 

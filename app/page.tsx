@@ -34,6 +34,8 @@ export default function BoardGame() {
   const [obstacles, setObstacles] = useState<Set<string>>(new Set())
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
 
+  const [isTeleportActive, setIsTeleportActive] = useState(false);
+
   const consumeItem = (itemIndex: number, playerId: number) => {
     const player = players[playerId]
     const item = player.inventory[itemIndex]
@@ -219,11 +221,19 @@ export default function BoardGame() {
   }
 
   const movePlayer = (newX: number, newY: number) => {
-    if (movesLeft <= 0) return
+    // Allow teleport even when movesLeft is 0
+    if (movesLeft <= 0 && !isTeleportActive) return
 
     const currentPlayerData = players[currentPlayer]
     const currentX = currentPlayerData.position.x
     const currentY = currentPlayerData.position.y
+
+    if(isTeleportActive){
+      console.log("Teleporting to ", newX, newY)
+      executeMove(newX, newY)
+      setIsTeleportActive(false)
+      return
+    }
 
     // Check if move is adjacent (1 tile in any direction including diagonals)
     const deltaX = Math.abs(newX - currentX)
@@ -258,10 +268,8 @@ export default function BoardGame() {
     }
 
     // Move the player
-    const updatedPlayers = players.map((player) =>
-      player.id === currentPlayer ? { ...player, position: { x: newX, y: newY } } : player,
-    )
-    setPlayers(updatedPlayers)
+    executeMove(newX, newY);
+
     setMovesLeft(movesLeft - 1)
 
     // Check if player landed on a monster (only in playing state)
@@ -284,6 +292,13 @@ export default function BoardGame() {
     } else {
       setGameMessage(`${movesLeft - 1} moves left.`)
     }
+  }
+
+  const executeMove = (newX: number, newY: number) => {
+    const updatedPlayers = players.map((player) =>
+      player.id === currentPlayer ? { ...player, position: { x: newX, y: newY } } : player,
+    )
+    setPlayers(updatedPlayers)
   }
 
   const startCombat = (monster: Monster) => {
@@ -644,7 +659,7 @@ export default function BoardGame() {
   const isTileClickableForBoard = (x: number, y: number) => {
     const currentPlayerData = players[currentPlayer]
     if (!currentPlayerData) return false
-    return isTileClickable(x, y, gameState, movesLeft, currentPlayerData, players, obstacles)
+    return isTileClickable(x, y, gameState, movesLeft, currentPlayerData, players, obstacles, monsters, isTeleportActive);
   }
 
   const activateBoardAbility = (abilityName: string) => {
@@ -665,8 +680,8 @@ export default function BoardGame() {
         setGameMessage(`${currentPlayerData.name} used Charge! +2 movement this turn.`)
         break
       case "Teleport":
+        setIsTeleportActive(true)
         setGameMessage(`${currentPlayerData.name} can teleport to any empty tile!`)
-        // Implementation would allow clicking any empty tile
         break
       case "Eagle Eye":
         setGameMessage(`${currentPlayerData.name} used Eagle Eye! All monsters revealed.`)
