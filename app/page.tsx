@@ -2,142 +2,17 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-
-// Game types
-type Player = {
-  id: number
-  name: string
-  character: string
-  position: { x: number; y: number }
-  health: number
-  maxHealth: number
-  inventory: string[]
-  color: string
-  combatBonuses: {
-    attackBonus: number
-    defenseBonus: number
-    rollBonus: number
-    canReroll: boolean
-    attackFirst: boolean
-  }
-  isEliminated: boolean
-  boardAbility: { name: string; description: string; uses: number; maxUses: number }
-  combatAbility: { name: string; description: string; uses: number; maxUses: number }
-  wildShapeRounds: number
-}
-
-type Monster = {
-  id: number
-  position: { x: number; y: number }
-  type: string
-  health: number
-  maxHealth: number
-  defeated: boolean
-}
-
-type GameState = "setup" | "character-select" | "playing" | "combat" | "pvp" | "game-over"
-
-type CombatState = {
-  monster?: Monster
-  opponent?: Player
-  playerDice: number | null
-  opponentDice: number | null
-  combatLog: string[]
-  isPlayerTurn: boolean
-  isRolling: boolean
-  hasUsedReroll: boolean
-  isPvP: boolean
-}
-
-const CHARACTERS = [
-  {
-    name: "Warrior",
-    emoji: "⚔️",
-    color: "bg-red-500",
-    boardAbility: { name: "Charge", description: "Move 2 extra tiles once per turn", uses: 1, maxUses: 1 },
-    combatAbility: { name: "Berserker Rage", description: "Deal +4 damage for one attack", uses: 2, maxUses: 2 },
-  },
-  {
-    name: "Mage",
-    emoji: "🧙‍♂️",
-    color: "bg-blue-500",
-    boardAbility: { name: "Teleport", description: "Move to any empty tile", uses: 1, maxUses: 1 },
-    combatAbility: { name: "Magic Missile", description: "Guaranteed 8 damage (no dice)", uses: 1, maxUses: 1 },
-  },
-  {
-    name: "Archer",
-    emoji: "🏹",
-    color: "bg-green-500",
-    boardAbility: { name: "Eagle Eye", description: "See all monster positions", uses: 3, maxUses: 3 },
-    combatAbility: { name: "Precise Shot", description: "Always roll maximum on dice", uses: 1, maxUses: 1 },
-  },
-  {
-    name: "Rogue",
-    emoji: "🗡️",
-    color: "bg-purple-500",
-    boardAbility: { name: "Stealth", description: "Move through other players", uses: 2, maxUses: 2 },
-    combatAbility: { name: "Backstab", description: "Attack first and deal +3 damage", uses: 2, maxUses: 2 },
-  },
-  {
-    name: "Paladin",
-    emoji: "🛡️",
-    color: "bg-yellow-500",
-    boardAbility: { name: "Divine Protection", description: "Heal 20 HP", uses: 2, maxUses: 2 },
-    combatAbility: { name: "Holy Strike", description: "Deal damage equal to missing health", uses: 1, maxUses: 1 },
-  },
-  {
-    name: "Druid",
-    emoji: "🌿",
-    color: "bg-emerald-500",
-    boardAbility: { name: "Nature's Path", description: "Move through obstacles", uses: 3, maxUses: 3 },
-    combatAbility: { name: "Wild Shape", description: "Take half damage for 3 rounds", uses: 1, maxUses: 1 },
-  },
-]
-
-const MONSTERS = ["🐉", "👹", "🧟", "🕷️", "🐺", "🦇", "👻", "🐍"]
-
-const MAGICAL_ITEMS = [
-  "⚔️ Magic Sword (+2 attack)",
-  "🛡️ Shield of Protection (+2 defense)",
-  "💎 Health Potion (restore 30 HP)",
-  "🔮 Crystal of Power (+1 to all rolls)",
-  "🏹 Enchanted Bow (+2 attack)",
-  "🧪 Strength Elixir (+3 attack for one combat)",
-  "🌟 Lucky Charm (reroll once per combat)",
-  "🗡️ Blade of Swiftness (attack first in combat)",
-]
-
-const BOARD_SIZE = 18
-
-const generateObstacles = () => {
-  const obstacles = new Set<string>()
-
-  // Add border obstacles
-  for (let i = 0; i < BOARD_SIZE; i++) {
-    obstacles.add(`0,${i}`) // Left border
-    obstacles.add(`${BOARD_SIZE - 1},${i}`) // Right border
-    obstacles.add(`${i},0`) // Top border
-    obstacles.add(`${i},${BOARD_SIZE - 1}`) // Bottom border
-  }
-
-  // Add some random internal obstacles
-  const internalObstacles = 15
-  for (let i = 0; i < internalObstacles; i++) {
-    let x, y
-    do {
-      x = Math.floor(Math.random() * (BOARD_SIZE - 4)) + 2
-      y = Math.floor(Math.random() * (BOARD_SIZE - 4)) + 2
-    } while (obstacles.has(`${x},${y}`))
-    obstacles.add(`${x},${y}`)
-  }
-
-  return obstacles
-}
+import { CHARACTERS, BOARD_SIZE, MONSTERS, MAGICAL_ITEMS } from "@/lib/constants"
+import { Player, Monster, GameState, CombatState, Character } from "@/lib/types"
+import { generateObstacles, getTileContent, calculateItemBonuses, isTileClickable } from "@/lib/game-utils"
+import { InventoryDialog } from "@/components/game/InventoryDialog"
+import { PlayerInfo } from "@/components/game/PlayerInfo"
+import { GameBoard } from "@/components/game/GameBoard"
+import { CombatScreen } from "@/components/game/CombatScreen"
+import { GameOverScreen } from "@/components/game/GameOverScreen"
+import { SetupScreen } from "@/components/game/SetupScreen"
+import { CharacterSelectScreen } from "@/components/game/CharacterSelectScreen"
 
 export default function BoardGame() {
   const [gameState, setGameState] = useState<GameState>("setup")
@@ -158,53 +33,6 @@ export default function BoardGame() {
   const [winner, setWinner] = useState<Player | null>(null)
   const [obstacles, setObstacles] = useState<Set<string>>(new Set())
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
-
-  const InventoryDialog = ({ player }: { player: Player }) => (
-    <Dialog open={showInventory} onOpenChange={setShowInventory}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{player.name}'s Inventory</DialogTitle>
-        </DialogHeader>
-        <ScrollArea className="max-h-96">
-          <div className="space-y-2">
-            {player.inventory.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">No items in inventory</p>
-            ) : (
-              player.inventory.map((item, index) => (
-                <Card key={index} className="p-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">{item}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => consumeItem(index, player.id)}
-                      disabled={
-                        // Disable if it's a permanent item or if it's combat and not usable
-                        (!item.includes("Health Potion") && !item.includes("Strength Elixir")) ||
-                        (gameState === "combat" && !item.includes("Health Potion"))
-                      }
-                    >
-                      Use
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {item.includes("Health Potion") && "Restores 30 HP"}
-                    {item.includes("Magic Sword") && "Permanent +2 attack"}
-                    {item.includes("Shield of Protection") && "Permanent +2 defense"}
-                    {item.includes("Crystal of Power") && "Permanent +1 to all rolls"}
-                    {item.includes("Enchanted Bow") && "Permanent +2 attack"}
-                    {item.includes("Strength Elixir") && "Temporary +3 attack for one combat"}
-                    {item.includes("Lucky Charm") && "Can reroll once per combat"}
-                    {item.includes("Blade of Swiftness") && "Attack first in combat"}
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  )
 
   const consumeItem = (itemIndex: number, playerId: number) => {
     const player = players[playerId]
@@ -273,7 +101,7 @@ export default function BoardGame() {
   }
 
   // Select character for current player
-  const selectCharacter = (character: (typeof CHARACTERS)[0]) => {
+  const selectCharacter = (character: Character) => {
     const newPlayer: Player = {
       id: currentPlayerSetup,
       name: `Player ${currentPlayerSetup + 1}`,
@@ -315,7 +143,7 @@ export default function BoardGame() {
     const monsterCount = 5
 
     for (let i = 0; i < monsterCount; i++) {
-      let position
+      let position: { x: number; y: number }
       do {
         position = {
           x: Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1,
@@ -363,17 +191,8 @@ export default function BoardGame() {
     setGameState("playing")
   }
 
-  const getTileContent = (x: number, y: number) => {
-    if (obstacles.has(`${x},${y}`)) {
-      return { type: "obstacle", content: "🗿" }
-    }
-
-    const player = players.find((p) => p.position.x === x && p.position.y === y && !p.isEliminated)
-    const monster = monsters.find((m) => m.position.x === x && m.position.y === y && !m.defeated)
-
-    if (player) return { type: "player", content: CHARACTERS.find((c) => c.name === player.character)?.emoji || "👤" }
-    if (monster) return { type: "monster", content: monster.type }
-    return { type: "empty", content: "" }
+  const getTileContentForBoard = (x: number, y: number) => {
+    return getTileContent(x, y, players, monsters, obstacles)
   }
 
   const rollDice = () => {
@@ -511,34 +330,6 @@ export default function BoardGame() {
       isPvP: true,
     })
     setGameState("combat")
-  }
-
-  const calculateItemBonuses = (inventory: string[]) => {
-    const bonuses = {
-      attackBonus: 0,
-      defenseBonus: 0,
-      rollBonus: 0,
-      canReroll: false,
-      attackFirst: false,
-    }
-
-    inventory.forEach((item) => {
-      if (item.includes("Magic Sword") || item.includes("Enchanted Bow")) {
-        bonuses.attackBonus += 2
-      } else if (item.includes("Shield of Protection")) {
-        bonuses.defenseBonus += 2
-      } else if (item.includes("Crystal of Power")) {
-        bonuses.rollBonus += 1
-      } else if (item.includes("Strength Elixir")) {
-        bonuses.attackBonus += 3
-      } else if (item.includes("Lucky Charm")) {
-        bonuses.canReroll = true
-      } else if (item.includes("Blade of Swiftness")) {
-        bonuses.attackFirst = true
-      }
-    })
-
-    return bonuses
   }
 
   const rerollDice = () => {
@@ -850,33 +641,10 @@ export default function BoardGame() {
     setGameMessage(`${players[nextPlayer]?.name}'s turn!`)
   }
 
-  const isTileClickable = (x: number, y: number) => {
-    if (gameState !== "playing" || movesLeft <= 0) return false
-
+  const isTileClickableForBoard = (x: number, y: number) => {
     const currentPlayerData = players[currentPlayer]
-    if (!currentPlayerData || currentPlayerData.isEliminated) return false
-
-    const distance = Math.abs(x - currentPlayerData.position.x) + Math.abs(y - currentPlayerData.position.y)
-    if (distance !== 1) return false
-
-    // Check for obstacles (unless player has Nature's Path ability)
-    if (obstacles.has(`${x},${y}`) && currentPlayerData.boardAbility.name !== "Nature's Path") {
-      return false
-    }
-
-    // Check for other players (unless player has Stealth ability)
-    const otherPlayer = players.find(
-      (p) => p.position.x === x && p.position.y === y && p.id !== currentPlayerData.id && !p.isEliminated,
-    )
-    if (otherPlayer && currentPlayerData.boardAbility.name !== "Stealth") {
-      return false
-    }
-
-    return true
-  }
-
-  const handleUseItem = (itemIndex: number, playerId: number) => {
-    consumeItem(itemIndex, playerId)
+    if (!currentPlayerData) return false
+    return isTileClickable(x, y, gameState, movesLeft, currentPlayerData, players, obstacles)
   }
 
   const activateBoardAbility = (abilityName: string) => {
@@ -919,313 +687,61 @@ export default function BoardGame() {
     }
   }
 
-  const renderPlayerInfo = (player: Player, index: number) => {
-    return (
-      <div key={player.id} className="space-y-2">
-        <div
-          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-            index === currentPlayer ? "ring-2 ring-primary" : ""
-          } ${player.color} text-white`}
-          onClick={() => setSelectedPlayer(player)}
-        >
-          <div className="flex items-center justify-between">
-            <span className="font-medium">
-              {CHARACTERS.find((c) => c.name === player.character)?.emoji} {player.name}
-            </span>
-            <span className="text-sm">
-              {player.health}/{player.maxHealth} HP
-            </span>
-          </div>
-          <div className="text-xs mt-1 opacity-90">
-            {player.character} {player.isEliminated ? "(Eliminated)" : ""}
-          </div>
-        </div>
-
-        {index === currentPlayer && gameState === "playing" && (
-          <div className="space-y-1">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={player.boardAbility.uses <= 0}
-              onClick={() => activateBoardAbility(player.boardAbility.name)}
-              className="w-full text-xs"
-            >
-              {player.boardAbility.name} ({player.boardAbility.uses}/{player.boardAbility.maxUses})
-            </Button>
-          </div>
-        )}
-      </div>
-    )
+  const handlePlayAgain = () => {
+    // Reset game
+    setGameState("setup")
+    setPlayers([])
+    setMonsters([])
+    setCurrentPlayer(0)
+    setWinner(null)
+    setCombatState(null)
+    setGameMessage("")
   }
 
+  const handleOpenInventory = () => {
+    setInventoryPlayerId(currentPlayer)
+    setShowInventory(true)
+  }
+
+  // Render game over screen
   if (gameState === "game-over" && winner) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardHeader>
-            <CardTitle className="text-center text-4xl mb-4">🎉 Game Over! 🎉</CardTitle>
-          </CardHeader>
-          <CardContent className="text-center space-y-6">
-            <div className="space-y-4">
-              <div className={`w-16 h-16 rounded-full ${winner.color} mx-auto`} />
-              <h2 className="text-3xl font-bold">{winner.name} Wins!</h2>
-              <p className="text-xl text-muted-foreground">Playing as {winner.character}</p>
-              <div className="bg-muted p-4 rounded-lg">
-                <p className="text-lg">Final Stats:</p>
-                <p>
-                  Health: {winner.health}/{winner.maxHealth}
-                </p>
-                <p>Items Collected: {winner.inventory.length}</p>
-              </div>
-            </div>
-            <Button
-              size="lg"
-              onClick={() => {
-                // Reset game
-                setGameState("setup")
-                setPlayers([])
-                setMonsters([])
-                setCurrentPlayer(0)
-                setWinner(null)
-                setCombatState(null)
-                setGameMessage("")
-              }}
-            >
-              Play Again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return <GameOverScreen winner={winner} onPlayAgain={handlePlayAgain} />
   }
 
+  // Render combat screen
   if (gameState === "combat" && combatState) {
-    const currentPlayerData = players[currentPlayer]
-    const opponent = combatState.isPvP ? combatState.opponent : null
-    const monster = combatState.isPvP ? null : combatState.monster
-
     return (
-      <div className="min-h-screen bg-background p-4">
-        <div className="max-w-4xl mx-auto">
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle className="text-center text-2xl">
-                {combatState.isPvP ? "PvP Combat" : "Combat"}: {currentPlayerData.name} vs{" "}
-                {opponent?.name || monster?.type}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Health bars */}
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-4 h-4 rounded-full ${currentPlayerData.color}`} />
-                    <span className="font-medium">{currentPlayerData.name}</span>
-                    <div className="flex gap-1">
-                      {currentPlayerData.combatBonuses.attackBonus > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{currentPlayerData.combatBonuses.attackBonus} ATK
-                        </Badge>
-                      )}
-                      {currentPlayerData.combatBonuses.defenseBonus > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{currentPlayerData.combatBonuses.defenseBonus} DEF
-                        </Badge>
-                      )}
-                      {currentPlayerData.combatBonuses.rollBonus > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{currentPlayerData.combatBonuses.rollBonus} ROLL
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Progress value={(currentPlayerData.health / currentPlayerData.maxHealth) * 100} className="h-4" />
-                  <div className="text-sm text-center">
-                    {currentPlayerData.health}/{currentPlayerData.maxHealth} HP
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    {opponent ? (
-                      <>
-                        <div className={`w-4 h-4 rounded-full ${opponent.color}`} />
-                        <span className="font-medium">{opponent.name}</span>
-                        <div className="flex gap-1">
-                          {opponent.combatBonuses.attackBonus > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{opponent.combatBonuses.attackBonus} ATK
-                            </Badge>
-                          )}
-                          {opponent.combatBonuses.defenseBonus > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{opponent.combatBonuses.defenseBonus} DEF
-                            </Badge>
-                          )}
-                          {opponent.combatBonuses.rollBonus > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{opponent.combatBonuses.rollBonus} ROLL
-                            </Badge>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-2xl">{monster?.type}</span>
-                        <span className="font-medium">Monster</span>
-                      </>
-                    )}
-                  </div>
-                  <Progress
-                    value={
-                      opponent
-                        ? (opponent.health / opponent.maxHealth) * 100
-                        : monster
-                          ? (monster.health / monster.maxHealth) * 100
-                          : 0
-                    }
-                    className="h-4"
-                  />
-                  <div className="text-sm text-center">
-                    {opponent
-                      ? `${opponent.health}/${opponent.maxHealth} HP`
-                      : monster
-                        ? `${monster.health}/${monster.maxHealth} HP`
-                        : ""}
-                  </div>
-                </div>
-              </div>
-
-              {/* Dice display */}
-              <div className="flex justify-center gap-8">
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-2">Player Roll</div>
-                  <div className="text-4xl">{combatState.playerDice ? `🎲 ${combatState.playerDice}` : "🎲 ?"}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-2">{opponent ? "Opponent" : "Monster"} Roll</div>
-                  <div className="text-4xl">{combatState.opponentDice ? `🎲 ${combatState.opponentDice}` : "🎲 ?"}</div>
-                </div>
-              </div>
-
-              {/* Combat log */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Combat Log</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {combatState.combatLog.map((log, index) => (
-                      <div key={index} className="text-sm">
-                        {log}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Combat actions */}
-              <div className="flex justify-center gap-4">
-                <Button
-                  size="lg"
-                  onClick={rollCombatDice}
-                  disabled={
-                    combatState.isRolling ||
-                    (opponent ? opponent.health <= 0 : monster ? monster.health <= 0 : true) ||
-                    currentPlayerData.health <= 0
-                  }
-                >
-                  {combatState.isRolling ? "Rolling..." : "Roll for Attack!"}
-                </Button>
-
-                {currentPlayerData.combatBonuses.canReroll && combatState.playerDice && !combatState.hasUsedReroll && (
-                  <Button variant="outline" onClick={rerollDice} disabled={combatState.isRolling}>
-                    Reroll (Lucky Charm)
-                  </Button>
-                )}
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setInventoryPlayerId(currentPlayer)
-                    setShowInventory(true)
-                  }}
-                >
-                  Inventory ({currentPlayerData.inventory.length})
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {inventoryPlayerId !== null && <InventoryDialog player={players[inventoryPlayerId]} />}
-        </div>
-      </div>
+      <CombatScreen
+        combatState={combatState}
+        currentPlayer={players[currentPlayer]}
+        players={players}
+        onRollCombatDice={rollCombatDice}
+        onRerollDice={rerollDice}
+        onOpenInventory={handleOpenInventory}
+      />
     )
   }
 
   // Render setup screen
   if (gameState === "setup") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-center text-2xl">Monster Hunt Board Game</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Select Number of Players</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {[2, 3, 4, 5, 6].map((count) => (
-                  <Button
-                    key={count}
-                    variant={playerCount === count ? "default" : "outline"}
-                    onClick={() => setPlayerCount(count)}
-                    className="h-12"
-                  >
-                    {count}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <Button onClick={startCharacterSelect} className="w-full">
-              Start Game
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <SetupScreen
+        playerCount={playerCount}
+        onPlayerCountChange={setPlayerCount}
+        onStartGame={startCharacterSelect}
+      />
     )
   }
 
   // Render character selection
   if (gameState === "character-select") {
     const usedCharacters = players.map((p) => p.character)
-
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardHeader>
-            <CardTitle className="text-center text-xl">
-              Player {currentPlayerSetup + 1} - Choose Your Character
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {CHARACTERS.map((character) => (
-                <Button
-                  key={character.name}
-                  variant="outline"
-                  disabled={usedCharacters.includes(character.name)}
-                  onClick={() => selectCharacter(character)}
-                  className="h-24 flex flex-col gap-2"
-                >
-                  <span className="text-2xl">{character.emoji}</span>
-                  <span className="text-sm">{character.name}</span>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <CharacterSelectScreen
+        currentPlayerSetup={currentPlayerSetup}
+        usedCharacters={usedCharacters}
+        onCharacterSelect={selectCharacter}
+      />
     )
   }
 
@@ -1248,7 +764,19 @@ export default function BoardGame() {
         </div>
 
         {/* Player Info */}
-        <div className="mb-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">{players.map(renderPlayerInfo)}</div>
+        <div className="mb-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          {players.map((player, index) => (
+            <PlayerInfo
+              key={player.id}
+              player={player}
+              index={index}
+              currentPlayer={currentPlayer}
+              gameState={gameState}
+              onPlayerSelect={setSelectedPlayer}
+              onActivateBoardAbility={activateBoardAbility}
+            />
+          ))}
+        </div>
 
         <div className="mb-4 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="flex items-center gap-4">
@@ -1265,32 +793,14 @@ export default function BoardGame() {
         </div>
 
         {/* Game Board */}
-        <div className="bg-card rounded-lg p-4 overflow-auto">
-          <div className="grid gap-px bg-border" style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)` }}>
-            {Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, index) => {
-              const x = index % BOARD_SIZE
-              const y = Math.floor(index / BOARD_SIZE)
-              const tileContent = getTileContent(x, y)
-              const isClickable = isTileClickable(x, y)
-
-              return (
-                <div
-                  key={`${x}-${y}`}
-                  className={`w-6 h-6 flex items-center justify-center text-xs cursor-pointer transition-colors ${
-                    tileContent.type === "obstacle"
-                      ? "bg-stone-600 text-stone-300"
-                      : "bg-background border border-border hover:bg-muted"
-                  } ${isClickable ? "ring-1 ring-primary/50 hover:ring-primary" : ""}`}
-                  onClick={() => movePlayer(x, y)}
-                >
-                  {tileContent.type === "player" && <span className="text-lg">{tileContent.content}</span>}
-                  {tileContent.type === "monster" && <span className="text-lg">{tileContent.content}</span>}
-                  {tileContent.type === "obstacle" && <span className="text-sm">{tileContent.content}</span>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <GameBoard
+          players={players}
+          monsters={monsters}
+          obstacles={obstacles}
+          onTileClick={movePlayer}
+          getTileContent={getTileContentForBoard}
+          isTileClickable={isTileClickableForBoard}
+        />
 
         <div className="mt-4 flex justify-center gap-4">
           <Button
@@ -1307,19 +817,20 @@ export default function BoardGame() {
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => {
-              setInventoryPlayerId(currentPlayer)
-              setShowInventory(true)
-            }}
-          >
+          <Button variant="outline" size="lg" onClick={handleOpenInventory}>
             Inventory ({players[currentPlayer]?.inventory.length || 0})
           </Button>
         </div>
 
-        {inventoryPlayerId !== null && <InventoryDialog player={players[inventoryPlayerId]} />}
+        {inventoryPlayerId !== null && (
+          <InventoryDialog
+            player={players[inventoryPlayerId]}
+            showInventory={showInventory}
+            setShowInventory={setShowInventory}
+            onConsumeItem={consumeItem}
+            gameState={gameState}
+          />
+        )}
       </div>
     </div>
   )
