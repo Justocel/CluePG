@@ -747,52 +747,44 @@ export default function BoardGame() {
 
   // Render game board
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Game Header */}
-        <div className="mb-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Monster Hunt {gameState === "pvp" ? "- PvP Phase" : ""}</h1>
-          <div className="flex gap-2">
-            <Badge variant="secondary">Current Player: {players[currentPlayer]?.name}</Badge>
-            {gameState === "playing" && (
-              <Badge variant="outline">Monsters Left: {monsters.filter((m) => !m.defeated).length}</Badge>
-            )}
-            {gameState === "pvp" && (
-              <Badge variant="destructive">Players Left: {players.filter((p) => !p.isEliminated).length}</Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Player Info */}
-        <div className="mb-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          {players.map((player, index) => (
-            <PlayerInfo
-              key={player.id}
-              player={player}
-              index={index}
-              currentPlayer={currentPlayer}
-              gameState={gameState}
-              onPlayerSelect={setSelectedPlayer}
-              onActivateBoardAbility={activateBoardAbility}
-            />
-          ))}
-        </div>
-
-        <div className="mb-4 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="flex items-center gap-4">
-            {diceValue && (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🎲</span>
-                <span className="text-xl font-bold">{diceValue}</span>
-              </div>
-            )}
-            {movesLeft > 0 && <Badge variant="default">Moves Left: {movesLeft}</Badge>}
+    <div className="h-screen bg-background flex">
+      {/* Left Sidebar */}
+      <div className="w-80 bg-card border-r border-border p-4 overflow-y-auto">
+        <div className="space-y-4">
+          {/* Game Header */}
+          <div className="border-b border-border pb-4">
+            <h1 className="text-xl font-bold mb-2">Monster Hunt {gameState === "pvp" ? "- PvP Phase" : ""}</h1>
+            <div className="space-y-2">
+              <Badge variant="secondary" className="w-full justify-center">Current Player: {players[currentPlayer]?.name}</Badge>
+              {gameState === "playing" && (
+                <Badge variant="outline" className="w-full justify-center">Monsters Left: {monsters.filter((m) => !m.defeated).length}</Badge>
+              )}
+              {gameState === "pvp" && (
+                <Badge variant="destructive" className="w-full justify-center">Players Left: {players.filter((p) => !p.isEliminated).length}</Badge>
+              )}
+            </div>
           </div>
 
-          {gameMessage && <div className="text-sm text-muted-foreground bg-muted p-2 rounded">{gameMessage}</div>}
+          {/* Player Info */}
+          <div className="space-y-2">
+            <h2 className="font-semibold">Players</h2>
+            {players.map((player, index) => (
+              <PlayerInfo
+                key={player.id}
+                player={player}
+                index={index}
+                currentPlayer={currentPlayer}
+                gameState={gameState}
+                onPlayerSelect={setSelectedPlayer}
+                onActivateBoardAbility={activateBoardAbility}
+              />
+            ))}
+          </div>
         </div>
+      </div>
 
-        {/* Game Board */}
+      {/* Center - Game Board */}
+      <div className="flex-1 flex flex-col">
         <GameBoard
           players={players}
           monsters={monsters}
@@ -801,37 +793,62 @@ export default function BoardGame() {
           getTileContent={getTileContentForBoard}
           isTileClickable={isTileClickableForBoard}
         />
-
-        <div className="mt-4 flex justify-center gap-4">
-          <Button
-            size="lg"
-            onClick={rollDice}
-            disabled={isRolling || movesLeft > 0 || players[currentPlayer]?.isEliminated}
-          >
-            {isRolling ? "Rolling..." : movesLeft > 0 ? "Use Your Moves" : "Roll Dice"}
-          </Button>
-
-          {movesLeft > 0 && (
-            <Button variant="outline" size="lg" onClick={endTurn}>
-              End Turn
-            </Button>
-          )}
-
-          <Button variant="outline" size="lg" onClick={handleOpenInventory}>
-            Inventory ({players[currentPlayer]?.inventory.length || 0})
-          </Button>
-        </div>
-
-        {inventoryPlayerId !== null && (
-          <InventoryDialog
-            player={players[inventoryPlayerId]}
-            showInventory={showInventory}
-            setShowInventory={setShowInventory}
-            onConsumeItem={consumeItem}
-            gameState={gameState}
-          />
-        )}
       </div>
+
+      {/* Right Sidebar */}
+      <div className="w-80 bg-card border-l border-border p-4 overflow-y-auto">
+        <div className="space-y-4">
+          {/* Game Status */}
+          <div className="border-b border-border pb-4">
+            <h2 className="font-semibold mb-2">Game Status</h2>
+            <div className="space-y-2">
+              {diceValue && (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🎲</span>
+                  <span className="text-xl font-bold">{diceValue}</span>
+                </div>
+              )}
+              {movesLeft > 0 && <Badge variant="default">Moves Left: {movesLeft}</Badge>}
+              {gameMessage && <div className="text-sm text-muted-foreground bg-muted p-2 rounded">{gameMessage}</div>}
+            </div>
+          </div>
+
+          {/* Game Actions */}
+          <div className="space-y-2">
+            <h2 className="font-semibold">Actions</h2>
+            <div className="space-y-2">
+              <Button
+                size="lg"
+                onClick={rollDice}
+                disabled={isRolling || movesLeft > 0 || players[currentPlayer]?.isEliminated}
+                className="w-full"
+              >
+                {isRolling ? "Rolling..." : movesLeft > 0 ? "Use Your Moves" : "Roll Dice"}
+              </Button>
+
+              {movesLeft > 0 && (
+                <Button variant="outline" size="lg" onClick={endTurn} className="w-full">
+                  End Turn
+                </Button>
+              )}
+
+              <Button variant="outline" size="lg" onClick={handleOpenInventory} className="w-full">
+                Inventory ({players[currentPlayer]?.inventory.length || 0})
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {inventoryPlayerId !== null && (
+        <InventoryDialog
+          player={players[inventoryPlayerId]}
+          showInventory={showInventory}
+          setShowInventory={setShowInventory}
+          onConsumeItem={consumeItem}
+          gameState={gameState}
+        />
+      )}
     </div>
   )
 }
